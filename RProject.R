@@ -1,0 +1,250 @@
+# R Project
+# BIOS 6640
+# Created By: Anjin Singh
+# Created On: 10/25/2018
+# Last Modified: 10/26/2018
+
+#All Packages and Libraries that are needed:
+install.packages("ggplot2")
+install.packages("stats")
+install.packages("dplyr")
+install.packages("tidyr")
+install.packages("backports")
+install.packages("Rcpp")
+library(Rcpp)
+library(backports)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(stats)
+
+#Calling in the Dataset
+mal <- read.csv('/Users/Anjin/Desktop/MozSyntheticMalaria.csv')
+
+
+#Creating our Under 5 Variable:
+mal$under5<-((mal$malaria/(mal$u5weight*mal$Population_UN))*1000)
+
+
+#Taking out 2017 Data
+mal2 <- subset(mal, Epiyear < 2017)
+head(mal2, n =5)
+
+#Creating our Lagged Variables:
+data.lag <- mal2 %>% group_by(DISTCODE) %>%
+  
+  mutate(raintot2 = lag(rainTot, 2), ## 2 week lag
+         raintot4 = lag(rainTot, 4), ## 4 week lag
+         raintot8 = lag(rainTot, 8), ## 8 week lag
+         tavg2= lag(tavg, 2), ## 2 week lag
+         tavg4 = lag(tavg, 4), ## 4 week lag
+         tavg8 = lag(tavg, 8)) ## 8 week lag
+
+
+#Creating Table 1 and Scatterplots (Figures 1-3)
+#Finding the mean, sd for Epiyear by Region
+library(plyr)
+
+#Creating under 5 stats and scatterplot
+u5data <- ddply(data.lag, c("Epiyear", "Region"), summarise,
+                N    = length(under5),
+                mean = mean(under5),
+                sd   = sd(under5),
+                se   = sd / sqrt(N)
+)
+u5data
+
+ggplot(data = u5data) + 
+  geom_point(mapping = aes(x = Epiyear, y = mean, color = Region)) +
+  labs(x = "Epidemiology week", y = "Mean Malaria Incidence of Children Under 5 (/1,000 cases)")
+
+
+
+#Creating rainTot stats and scatterplot
+rainTotdata <- ddply(data.lag, c("Epiyear", "Region"), summarise,
+                     N    = length(rainTot),
+                     mean = mean(rainTot),
+                     sd   = sd(rainTot),
+                     se   = sd / sqrt(N)
+)
+rainTotdata
+
+ggplot(data = rainTotdata) + 
+  geom_point(mapping = aes(x = Epiyear, y = mean, color = Region)) +
+  labs(x = "Epidemiology week", y = "Mean Weekly Total Rainfal (mm)")
+
+
+#Creating tavg stats and scatterplot
+tavgdata <- ddply(data.lag, c("Epiyear", "Region"), summarise,
+                  N    = length(tavg),
+                  mean = mean(tavg),
+                  sd   = sd(tavg),
+                  se   = sd / sqrt(N)
+)
+tavgdata
+ggplot(data = tavgdata) + 
+  geom_point(mapping = aes(x = Epiyear, y = mean, color = Region)) +
+  labs(x = "Epidemiology week", y = "Mean Average Temperature (deg. C))")
+
+
+
+
+#Creating our Lag Graphs (Figures 4-5)
+
+ggplot(data = data.lag) + 
+  geom_smooth(mapping = aes(x = Epiweek, y = under5,  color= "Malaria Incidence for under 5")) +
+  geom_smooth(mapping = aes(x = Epiweek, y = rainTot, color= "Weekly Total Rainfall(mm)")) +
+  geom_smooth(mapping = aes(x = Epiweek, y = raintot2, color= "Weekly Total Rainfall(mm), Lagged 2 weeks")) +
+  geom_smooth(mapping = aes(x = Epiweek, y = raintot4, color= "Weekly Total Rainfall(mm), Lagged 4 weeks")) +
+  geom_smooth(mapping = aes(x = Epiweek, y = raintot8, color= "Weekly Total Rainfall(mm), Lagged 8 weeks")) +
+  facet_wrap(~ Region, nrow=2) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Weekly total rain (mm)")) +
+  labs(x = "Epidemiology week", y = "Cases per 1,000")
+
+
+
+ggplot(data = data.lag) + 
+  geom_smooth(mapping = aes(x = Epiweek, y = under5,  color= "Malaria Incidence for under 5")) +
+  geom_smooth(mapping = aes(x = Epiweek, y = tavg, color= "Average Temperature")) +
+  geom_smooth(mapping = aes(x = Epiweek, y = tavg2, color= "Average Temperature, Lagged 2 weeks")) +
+  geom_smooth(mapping = aes(x = Epiweek, y = tavg4, color= "Average Temperature, Lagged 4 weeks")) +
+  geom_smooth(mapping = aes(x = Epiweek, y = tavg8, color= "Average Temperature, Lagged 8 weeks")) +
+  facet_wrap(~ Region, nrow=2) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Average Temperature")) +
+  labs(x = "Epidemiology week", y = "Cases per 1,000")
+
+
+#Figure 6
+#Creating the Total Rainfall by Year Map for Province and EpiYear:
+library(RColorBrewer)
+library(sp) 
+library(maptools)
+library(lattice) 
+library(latticeExtra)
+library(classInt) 
+library(spData)
+
+poly1 <- readShapePoly('/Users/Anjin/Desktop/mozambique_admin1.shp', IDvar = "NAME1")
+#head(poly1@data)
+#poly1@data
+#plot(poly1)
+
+rainTot <- as.data.frame(tapply(mal2$rainTot, list(mal2$Province, mal2$Epiyear), sum))
+colnames(rainTot) <- c("rain10", "rain11", "rain12", "rain13", "rain14", "rain15", "rain16")
+allStats <- as.data.frame(rainTot)
+allStats2 <- allStats[-c(6), ]
+rownames(allStats2)[1]<-"Cabo Delgado"
+rownames(allStats2)[2]<-"Gaza"
+rownames(allStats2)[3]<-"Inhambane"
+rownames(allStats2)[4]<-"Manica"
+rownames(allStats2)[5]<-"Maputo"
+rownames(allStats2)[6]<-"Nampula"
+rownames(allStats2)[7]<-"Nassa"
+rownames(allStats2)[8]<-"Sofala"
+rownames(allStats2)[9]<-"Tete"
+rownames(allStats2)[10]<-"Zambezia"
+allStats2
+
+polydat <- SpatialPolygonsDataFrame(poly1, allStats2)
+names(polydat)
+rainPal <- brewer.pal(n = 7, name = "YlGnBu")
+
+
+spplot(polydat, c("rain10", "rain11", "rain12", "rain13", "rain14", "rain15", "rain16"), 
+       names.attr = c("2010", "2011", "2012", "2013", "2014", "2015", "2016"), 
+       colorkey=list(space="right"), scales = list(draw = TRUE), 
+       main = "Total rainfall by year", 
+       as.table = TRUE, col.regions = rainPal, col="transparent", cuts = 5 )
+
+
+
+#Creating our Map of under 5cases for Province and EpiYear:
+cpt <- as.data.frame(tapply(mal2$under5, list(mal2$Province, mal2$Epiyear), sum))
+colnames(cpt) <- c("cpt10", "cpt11", "cpt12", "cpt13", "cpt14", "cpt15", "cpt16")
+cpt
+
+allStats3 <- as.data.frame(cpt)
+allStats3
+allStats4 <- allStats3[-c(6), ] 
+rownames(allStats4)[1]<-"Cabo Delgado"
+rownames(allStats4)[2]<-"Gaza"
+rownames(allStats4)[3]<-"Inhambane"
+rownames(allStats4)[4]<-"Manica"
+rownames(allStats4)[5]<-"Maputo"
+rownames(allStats4)[6]<-"Nampula"
+rownames(allStats4)[7]<-"Nassa"
+rownames(allStats4)[8]<-"Sofala"
+rownames(allStats4)[9]<-"Tete"
+rownames(allStats4)[10]<-"Zambezia"
+allStats4
+
+
+#Reading in the Shape File and Combining with our dataset:
+poly1 <- readShapePoly('/Users/Anjin/Desktop/mozambique_admin1.shp', IDvar = "NAME1")
+#head(poly1@data)
+#poly1@data
+#plot(poly1)
+polydat2 <- SpatialPolygonsDataFrame(poly1, allStats4)
+names(polydat2)
+
+#This is our color scheme: 
+rainPal <- brewer.pal(n = 7, name = "YlGnBu")
+
+
+#Creating the Plots for Total under 5 malaria cases by year: 
+spplot(polydat2, c("cpt10", "cpt11", "cpt12", "cpt13", "cpt14", "cpt15", "cpt16"), 
+       names.attr = c("2010", "2011", "2012", "2013", "2014", "2015", "2016"), 
+       colorkey=list(space="right"), scales = list(draw = TRUE), 
+       main = "Total under 5 malaria cases by year", 
+       as.table = TRUE, col.regions = rainPal, col="transparent", cuts = 5)
+
+
+
+
+
+
+#Creating a map of average temperature by year by province:
+tavg <- as.data.frame(tapply(mal2$tavg, list(mal2$Province, mal2$Epiyear), mean))
+colnames(tavg) <- c("tavg10", "tavg11", "tavg12", "tavg13", "tavg14", "tavg15", "tavg16")
+tavg
+
+allStats5 <- as.data.frame(tavg)
+allStats5
+allStats6 <- allStats5[-c(6), ] 
+rownames(allStats6)[1]<-"Cabo Delgado"
+rownames(allStats6)[2]<-"Gaza"
+rownames(allStats6)[3]<-"Inhambane"
+rownames(allStats6)[4]<-"Manica"
+rownames(allStats6)[5]<-"Maputo"
+rownames(allStats6)[6]<-"Nampula"
+rownames(allStats6)[7]<-"Nassa"
+rownames(allStats6)[8]<-"Sofala"
+rownames(allStats6)[9]<-"Tete"
+rownames(allStats6)[10]<-"Zambezia"
+allStats6
+
+
+#Reading in the Shape File and Combining with our dataset:
+poly1 <- readShapePoly('/Users/Anjin/Desktop/mozambique_admin1.shp', IDvar = "NAME1")
+#head(poly1@data)
+#poly1@data
+#plot(poly1)
+polydat3 <- SpatialPolygonsDataFrame(poly1, allStats6)
+names(polydat3)
+
+
+
+#Creating the Plots for Total under 5 malaria cases by year: 
+spplot(polydat3, c("tavg10", "tavg11", "tavg12", "tavg13", "tavg14", "tavg15", "tavg16"), 
+       names.attr = c("2010", "2011", "2012", "2013", "2014", "2015", "2016"), 
+       colorkey=list(space="right"), scales = list(draw = TRUE), 
+       main = "Average temperature by Year", 
+       as.table = TRUE, col.regions = rainPal, col="transparent", cuts = 5)
+
+
+
+
+
+
+
+
